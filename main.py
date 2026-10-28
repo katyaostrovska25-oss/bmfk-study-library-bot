@@ -1,4 +1,5 @@
 import os
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -16,7 +17,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📤 Запропонувати файл", callback_data="upload")],
         [InlineKeyboardButton("ℹ️ Допомога", callback_data="help")],
     ]
-    await update.message.reply_text(
+    await update.effective_message.reply_text(
         "📚 БІБЛІОТЕКА БМФК\n\n"
         "Вітаю! Тут збиратимемо навчальні матеріали "
         "для студентів Бериславського медичного фахового коледжу.\n\n"
@@ -26,9 +27,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def books(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
-        "📚 Каталог підручників\n\n"
-        "Бібліотека готується до наповнення.\n"
-        "Незабаром тут з'являться підручники та посібники."
+        "📚 Каталог підручників поки наповнюється."
     )
 
 async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -38,16 +37,15 @@ async def search(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
-        "📤 Щоб запропонувати навчальний файл, "
-        "поки зверніться до адміністратора бібліотеки."
+        "📤 Для додавання файлів зверніться до адміністратора."
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(
-        "ℹ️ Як користуватися бібліотекою:\n"
-        "/start — відкрити меню\n"
-        "/books — переглянути підручники\n"
-        "/search — пошук матеріалів\n"
+        "ℹ️ Команди бібліотеки:\n"
+        "/start — меню\n"
+        "/books — підручники\n"
+        "/search — пошук\n"
         "/upload — запропонувати файл\n"
         "/help — допомога"
     )
@@ -55,25 +53,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-
     if query.data == "books":
-        await query.message.reply_text(
-            "📚 Каталог підручників поки наповнюється."
-        )
+        await books(update, context)
     elif query.data == "search":
-        await query.message.reply_text(
-            "🔎 Пошук матеріалів поки налаштовується."
-        )
+        await search(update, context)
     elif query.data == "upload":
-        await query.message.reply_text(
-            "📤 Для додавання файлів зверніться до адміністратора."
-        )
+        await upload(update, context)
     elif query.data == "help":
-        await query.message.reply_text(
-            "Натисніть «Підручники», щоб переглянути каталог."
-        )
+        await help_command(update, context)
 
-def main():
+async def main():
     if not TOKEN:
         raise RuntimeError("Не задано змінну BOT_TOKEN")
 
@@ -85,13 +74,10 @@ def main():
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    port = int(os.environ.get("PORT", "10000"))
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path=TOKEN,
-        webhook_url=f"{os.environ['RENDER_EXTERNAL_URL']}/{TOKEN}",
-    )
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
