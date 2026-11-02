@@ -532,16 +532,16 @@ async def handle_suggestion(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "username": message.from_user.username or "немає",
         }
 
-    else:await message.reply_text(
-            "Надішліть PDF-файл або коректне посилання, яке починається з http:// або https://."
-        )
-        return
+  else:
+    await message.reply_text(
+        "Надішліть PDF-файл або коректне посилання, яке починається з http:// або https://."
+    )
+    return
 
-    context.user_data.clear()
+context.user_data.clear()
 
-    pending = context.bot_data.setdefault("pending", {})
-    pending[suggestion["id"]] = suggestion
-
+pending = context.bot_data.setdefault("pending", {})
+pending[suggestion["id"]] = suggestion
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(
