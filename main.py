@@ -203,8 +203,13 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if text == "🔙 Назад до категорій":
-        context.user_data.pop("selected_category", None)
-        await update.message.reply_text("Оберіть категорію:", reply_markup=get_categories_keyboard())
+        if context.user_data.get("upload_state") == "waiting_for_discipline_upload":
+            context.user_data["upload_state"] = "waiting_for_category_upload"
+            await update.message.reply_text("Оберіть категорію для файлу:", reply_markup=get_categories_keyboard())
+        else:
+            context.user_data.pop("selected_category", None)
+            context.user_data["nav_state"] = "choosing_category"
+            await update.message.reply_text("Оберіть категорію:", reply_markup=get_categories_keyboard())
         return
 
     if text == "📚 Підручники":
@@ -221,6 +226,27 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.user_data.get("waiting_for_search"):
         context.user_data["waiting_for_search"] = False
         await perform_search(update, context, text)
+    elif context.user_data.get("upload_state") == "waiting_for_category_upload":
+        if text in CATEGORIES:
+            context.user_data["upload_category"] = text
+            context.user_data["upload_state"] = "waiting_for_discipline_upload"
+            await update.message.reply_text(f"Категорія: **{text}**\nТепер оберіть дисципліну:", reply_markup=get_disciplines_keyboard(text), parse_mode="Markdown")
+        else:
+            await update.message.reply_text("Будь ласка, оберіть категорію з кнопок нижче.", reply_markup=get_categories_keyboard())
+    elif context.user_data.get("upload_state") == "waiting_for_discipline_upload":
+        selected_cat = context.user_data.get("upload_category")
+        if selected_cat and text in CATEGORIES.get(selected_cat, []):
+            context.user_data["upload_discipline"] = text
+            context.user_data["upload_state"] = "waiting_for_title"
+            default_name = context.user_data.get("default_title", "Підручник")
+            await update.message.reply_text(
+                f"Дисципліна: **{text}**\n\n"
+                f"Введіть **назву підручника** текстом (або надішліть крапку `.`, щоб використати назву файлу: *{default_name}*):",
+                reply_markup=get_main_menu(user.id),
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text("Будь ласка, оберіть дисципліну з кнопок нижче.", reply_markup=get_disciplines_keyboard(selected_cat))
     elif context.user_data.get("upload_state") == "waiting_for_title":
         await finalize_book_upload(update, context, text)
     elif context.user_data.get("nav_state") == "choosing_category":
@@ -229,7 +255,7 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data["nav_state"] = "choosing_discipline"
             await update.message.reply_text(f"Категорія: **{text}**\nОберіть дисципліну:", reply_markup=get_disciplines_keyboard(text), parse_mode="Markdown")
         else:
-            await update.message.reply_text("Будь ласка, оберіть категорию за допомогою кнопок нижче.", reply_markup=get_categories_keyboard())
+            await update.message.reply_text("Будь ласка, оберіть категорію за допомогою кнопок нижче.", reply_markup=get_categories_keyboard())
     elif context.user_data.get("nav_state") == "choosing_discipline":
         selected_cat = context.user_data.get("selected_category")
         if selected_cat and text in CATEGORIES.get(selected_cat, []):
@@ -263,36 +289,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not document:
         return
     
-    if context.user_data.get("upload_state") == "waiting_for_file":
-        context.user_data["file_id"] = document.file_id
-        context.user_data["default_title"] = document.file_name or "Без назви"
-        
-        context.user_data["upload_state"] = "waiting_for_category_upload"
-        await update.message.reply_text("Чудово! Тепер оберіть категорію для цього файлу:", reply_markup=get_categories_keyboard())
-    elif context.user_data.get("upload_state") == "waiting_for_category_upload":
-        text = update.message.text
-        if text in CATEGORIES:
-            context.user_data["upload_category"] = text
-            context.user_data["upload_state"] = "waiting_for_discipline_upload"
-            await update.message.reply_text(f"Категорія: **{text}**\nТепер оберіть дисципліну:", reply_markup=get_disciplines_keyboard(text), parse_mode="Markdown")
-        else:
-            await update.message.reply_text("Будь ласка, оберіть категорію з кнопок.", reply_markup=get_categories_keyboard())
-    elif context.user_data.get("upload_state") == "waiting_for_discipline_upload":
-        selected_cat = context.user_data.get("upload_category")
-        if selected_cat and text in CATEGORIES.get(selected_cat, []):
-            context.user_data["upload_discipline"] = text
-            context.user_data["upload_state"] = "waiting_for_title"
-            default_name = context.user_data.get("default_title", "Підручник")
-            await update.message.reply_text(
-                f"Дисципліна: **{text}**\n\n"
-                f"Введіть **назву підручника** текстом (або надішліть крапку `.`, щоб використати назву файлу: *{default_name}*):",
-                reply_markup=get_main_menu(update.effective_user.id),
-                parse_mode="Markdown"
-            )
-        else:
-            await update.message.reply_text("Будь ласка, оберіть дисципліну з кнопок.", reply_markup=get_disciplines_keyboard(selected_cat))
-    else:
-        await update.message.reply_text("Будь ласка, спочатку натисніть «📤 Запропонувати файл» у головному меню.")
+    # Разрешаем загрузку файла, если пользователь нажал «Запропонувати файл» ИЛИ если он вообще скинул PDF в режиме диалога
+    context.user_data["file_id"] = document.file_id
+    context.user_data["default_title"] = document.file_name or "Без назви"
+    context.user_data["upload_state"] = "waiting_for_category_upload"
+    
+    await update.message.reply_text(
+        "📄 Файл отримано! Тепер оберіть категорію для цього файлу:",
+        reply_markup=get_categories_keyboard()
+    )
 
 
 async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
