@@ -251,7 +251,6 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pass
 
     data = query.data
-    user = update.effective_user
 
     try:
         if data.startswith("cat_"):
@@ -436,27 +435,9 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⚙️ **Панель адміністратора:**\nОберіть дію:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 
-# --- ВЕБСЕРВЕР ДЛЯ RENDER ---
+# --- ВЕБСЕРВЕР ДЛЯ RENDER ТА ЗАПУСК ---
 
-async def handle_web_request(request):
-    return web.Response(text="BMFK Study Library Bot is running!")
-
-
-async def start_web_server():
-    app = web.Application()
-    app.router.add_get("/", handle_web_request)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    
-    port = int(os.getenv("PORT", "10000"))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
-    logger.info(f"Вебсервер запущено на порту {port}")
-
-
-# --- ГОЛОВНА ФУНКЦІЯ ЗАПУСКУ ---
-
-def main():
+async def run_bot_and_server():
     if not BOT_TOKEN:
         logger.error("Помилка: BOT_TOKEN не встановлено у змінних середовища!")
         return
@@ -469,11 +450,33 @@ def main():
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(handle_callback))
 
-    loop = asyncio.get_event_loop()
-    loop.create_task(start_web_server())
+    # Налаштування та запуск вебсерверу aiohttp для Render
+    app = web.Application()
+    app.router.add_get("/", lambda req: web.Response(text="BMFK Study Library Bot is running!"))
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    logger.info(f"Вебсервер запущено на порту {port}")
 
+    # Запуск Telegram бота в фоновому режимі
+    await application.initialize()
+    await application.start()
+    await application.updater.start_polling()
     logger.info("Бот запущено в режимі Polling...")
-    application.run_polling()
+
+можна заблокувати потік назавжди, щоб додаток не вимикався
+    stop_event = asyncio.Event()
+    await stop_event.wait()
+
+
+def main():
+    try:
+        asyncio.run(run_bot_and_server())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":
