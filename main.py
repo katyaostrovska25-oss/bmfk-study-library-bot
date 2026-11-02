@@ -501,38 +501,36 @@ def valid_url(text):
         return False
 
 
-async def handle_suggestion(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
+async def handle_suggestion(update: Update, context: ContextTypes.DEFAULT_TYPE): message = update.message
+if message.document:
+    document = message.document
 
-    if message.document:
-        document = message.document
+    if document.mime_type != "application/pdf" and not (document.file_name or "").lower().endswith(".pdf"):
+        await message.reply_text(
+            "Будь ласка, надсилайте файли у форматі PDF."
+        )
+        return
 
-        if document.mime_type != "application/pdf" and not document.file_name.lower().endswith(".pdf"):
-            await message.reply_text(
-                "Будь ласка, надсилайте файли у форматі PDF."
-            )
-            return
+    suggestion = {
+        "id": str(uuid.uuid4()),
+        "title": document.file_name or "Навчальний матеріал",
+        "file_id": document.file_id,
+        "url": None,
+        "user_id": message.from_user.id,
+        "username": message.from_user.username or "немає",
+    }
 
-        suggestion = {
-            "id": str(uuid.uuid4()),
-            "title": document.file_name or "Навчальний матеріал",
-            "file_id": document.file_id,
-            "url": None,
-            "user_id": message.from_user.id,
-            "username": message.from_user.username or "немає",
-        }
+elif message.text and valid_url(message.text):
+    suggestion = {
+        "id": str(uuid.uuid4()),
+        "title": message.text.strip(),
+        "file_id": None,
+        "url": message.text.strip(),
+        "user_id": message.from_user.id,
+        "username": message.from_user.username or "немає",
+    }
 
-    elif message.text and valid_url(message.text):
-        suggestion = {
-            "id": str(uuid.uuid4()),
-            "title": message.text.strip(),
-            "file_id": None,
-            "url": message.text.strip(),
-            "user_id": message.from_user.id,
-            "username": message.from_user.username or "немає",
-        }
-
-  else:
+else:
     await message.reply_text(
         "Надішліть PDF-файл або коректне посилання, яке починається з http:// або https://."
     )
@@ -542,48 +540,49 @@ context.user_data.clear()
 
 pending = context.bot_data.setdefault("pending", {})
 pending[suggestion["id"]] = suggestion
-    keyboard = InlineKeyboardMarkup([
-        [
-            InlineKeyboardButton(
-                "✅ Додати до бібліотеки",
-                callback_data=f"approve:{suggestion['id']}",
-            ),
-            InlineKeyboardButton(
-                "❌ Відхилити",
-                callback_data=f"reject:{suggestion['id']}",
-            ),
-        ]
-    ])
 
-    try:
-        await context.bot.send_message(
+keyboard = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton(
+            "✅ Додати до бібліотеки",
+            callback_data=f"approve:{suggestion['id']}",
+        ),
+        InlineKeyboardButton(
+            "❌ Відхилити",
+            callback_data=f"reject:{suggestion['id']}",
+        ),
+    ]
+])
+
+try:
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=(
+            "📥 Нова пропозиція до бібліотеки!\n\n"
+            f"Назва: {suggestion['title']}\n"
+            f"Користувач: @{suggestion['username']}\n"
+            f"ID користувача: {suggestion['user_id']}\n\n"
+            "Перевірте матеріал та оберіть дію:"
+        ),
+        reply_markup=keyboard,
+    )
+
+    if suggestion["file_id"]:
+        await context.bot.send_document(
             chat_id=ADMIN_ID,
-            text=(
-                "📥 Нова пропозиція до бібліотеки!\n\n"
-                f"Назва: {suggestion['title']}\n"
-                f"Користувач: @{suggestion['username']}\n"
-                f"ID користувача: {suggestion['user_id']}\n\n"
-                "Перевірте матеріал та оберіть дію:"
-            ),
-            reply_markup=keyboard,
+            document=suggestion["file_id"],
         )
 
-        if suggestion["file_id"]:
-            await context.bot.send_document(
-                chat_id=ADMIN_ID,
-                document=suggestion["file_id"],
-            )
+    await message.reply_text(
+        "Дякуємо! Ваш матеріал надіслано адміністратору на перевірку. 📚"
+    )
 
-        await message.reply_text(
-            "Дякуємо! Ваш матеріал надіслано адміністратору на перевірку. 📚"
-        )
+except Exception:
+    pending.pop(suggestion["id"], None)
 
-    except Exception:
-        pending.pop(suggestion["id"], None)
-
-        await message.reply_text(
-            "Не вдалося передати матеріал адміністратору. Спробуйте пізніше."
-        )
+    await message.reply_text(
+        "Не вдалося передати матеріал адміністратору. Спробуйте пізніше."
+    )
 
 
 # =========================
