@@ -1,7 +1,29 @@
-import os import json import base64 import asyncio import uuid from urllib.parse import urlsplit
-from aiohttp import web, ClientSession from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup from telegram.ext import ( Application, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters, )
-TOKEN = os.environ["BOT_TOKEN"] ADMIN_ID = int(os.environ["ADMIN_ID"]) GITHUB_TOKEN = os.environ["GITHUB_TOKEN"] GITHUB_REPO = os.environ["GITHUB_REPO"] BASE_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/") PORT = int(os.environ.get("PORT", "10000"))
+import os 
+import json 
+import base64 
+import asyncio 
+import uuid 
+from urllib.parse import urlsplit
+
+from aiohttp import web, ClientSession 
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup 
+from telegram.ext import ( 
+Application, 
+CommandHandler, 
+CallbackQueryHandler,
+MessageHandler, 
+ContextTypes, 
+filters, 
+)
+TOKEN = os.environ["BOT_TOKEN"] 
+ADMIN_ID = int(os.environ["ADMIN_ID"]) 
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"] 
+GITHUB_REPO = os.environ["GITHUB_REPO"] 
+BASE_URL = os.environ["RENDER_EXTERNAL_URL"].rstrip("/") 
+PORT = int(os.environ.get("PORT", "10000"))
+
 DATA_FILE = "books.json"
+
 CATEGORIES = { "1": ("Гуманітарні та соціально-економічні дисципліни", [ "Історія медицини та медсестринства", "Історія та культура України", "Українська мова за професійним спрямуванням", ]), "2": ("Загальноосвітні дисципліни", [ "Англійська мова", "Захист України", "Хімія", ]), "3": ("Клінічні дисципліни — лікувальна справа", [ "Акушерство і гінекологія", "Медична та соціальна реабілітація", "Неврологія", "Основи медсестринства. Догляд за хворими", "Педіатрія", "Психіатрія", ]), "4": ("Клінічні дисципліни — сестринська справа", [ "Акушерство і гінекологія", "Медична та соціальна реабілітація", "Медсестринство в геронтології та геріатрії", "Медсестринство в інфектології", "Медсестринство в неврології", "Медсестринство в педіатрії", "Основи медсестринства. Догляд за хворими", "Психіатрія", ]), "5": ("Природничо-наукові дисципліни — лікувальна справа", [ "Анатомія і фізіологія людини", "Медична хімія", "Мікробіологія з вірусологією та основами імунології", "Нутриціологія", "Основи психології міжособового спілкування", ]), "6": ("Природничо-наукові дисципліни — фармація", [ "Техніка лабораторних робіт", "Технологія ліків", "Фармацевтична хімія", ]), }
 =========================
 GITHUB
