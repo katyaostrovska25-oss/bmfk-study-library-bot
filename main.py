@@ -160,7 +160,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         f"Вітаю, {user.first_name}! 👋\n\n"
         "Це офіційний бот електронної бібліотеки **Бериславського медичного фахового коледжу**.\n"
-        "Тут ви можете шукати, читати та завантажувати навчальні матеріалі й підручники.\n\n"
+        "Тут ви можете шукати, читати та завантажувати навчальні матеріали й підручники.\n\n"
         "Оберіть потрібний розділ у меню нижче:"
     )
     await update.message.reply_text(text, reply_markup=get_main_menu(user.id), parse_mode="Markdown")
@@ -223,10 +223,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["upload_state"] = "waiting_for_category"
         await update.message.reply_text("Чудово! Тепер оберіть категорію дисциплін для цього файлу:", reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        await update.message.reply_text("Будь ласка, спочатку натисніть «📤 Запропонувати файл» у головному меню.")
+        await update.message.reply_text("Будь ласка, спочатку натисніть «📤 Запропонувати файл» або скористайтеся меню.")
 
 
-# --- РОЗДІЛ «ПІДРУЧНИКИ» ---
+# --- РОЗДІЛ «ПІДРУЧНИКИ» ТА ПОКРОКОВЕ ЗАВАНТАЖЕННЯ ---
 
 async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = []
@@ -234,7 +234,13 @@ async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton(cat, callback_data=f"cat_{cat}")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await update.message.reply_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
+    if update.callback_query:
+        try:
+            await update.callback_query.message.edit_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
+        except Exception:
+            pass
+    else:
+        await update.message.reply_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -444,6 +450,7 @@ async def run_bot_and_server():
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(handle_callback))
 
+    # Налаштування та запуск вебсерверу aiohttp для Render
     app = web.Application()
     app.router.add_get("/", lambda req: web.Response(text="BMFK Study Library Bot is running!"))
     runner = web.AppRunner(app)
@@ -454,6 +461,7 @@ async def run_bot_and_server():
     await site.start()
     logger.info(f"Вебсервер запущено на порту {port}")
 
+    # Запуск Telegram бота в фоновому режимі
     await application.initialize()
     await application.start()
     await application.updater.start_polling()
