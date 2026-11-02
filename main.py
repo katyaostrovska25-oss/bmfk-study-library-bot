@@ -56,7 +56,6 @@ CATEGORIES = {
         "Психіатрія",
     ],
     "Клінічні дисципліни — сестринська справа": [
-        "Акушерство і гінекология", # (або гінекологія)
         "Акушерство і гінекологія",
         "Медична та соціальна реабілітація",
         "Медсестринство в геронтології та геріатрії",
@@ -158,28 +157,16 @@ def get_main_menu(user_id: int):
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    # Удаляем сообщение пользователя с командой /start, чтобы не засорять чат
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     text = (
         f"Вітаю, {user.first_name}! 👋\n\n"
         "Це офіційний бот електронної бібліотеки **Бериславського медичного фахового коледжу**.\n"
-        "Тут ви можете шукати, читати та завантажувати навчальні матеріали й підручники.\n\n"
+        "Тут ви можете шукати, читати та завантажувати навчальні матеріалі й підручники.\n\n"
         "Оберіть потрібний розділ у меню нижче:"
     )
-    msg = await update.message.reply_text(text, reply_markup=get_main_menu(user.id), parse_mode="Markdown")
-    context.user_data["last_bot_message_id"] = msg.message_id
+    await update.message.reply_text(text, reply_markup=get_main_menu(user.id), parse_mode="Markdown")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     text = (
         "ℹ️ **Довідка користувача бібліотеки:**\n\n"
         "• **📚 Підручники** — перегляд матеріалів за категоріями та дисциплінами.\n"
@@ -194,12 +181,6 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
     user = update.effective_user
 
-    # Автоматически удаляем текстовые сообщения пользователя, чтобы чат был чистым
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     if text in ["📚 Підручники", "🔎 Пошук матеріалів", "📤 Запропонувати файл", "ℹ️ Допомога", "⚙️ Адмін-панель"]:
         context.user_data.pop("waiting_for_search", None)
         context.user_data.pop("upload_state", None)
@@ -209,12 +190,12 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_categories(update, context)
     elif text == "🔎 Пошук матеріалів":
         context.user_data["waiting_for_search"] = True
-        msg = await update.message.reply_text("Введіть назву підручника, дисципліни або ключове слово для пошуку:")
-        context.user_data["last_bot_message_id"] = msg.message_id
+        await update.message.reply_text("Введіть назву підручника, дисципліни або ключове слово для пошуку:")
     elif text == "📤 Запропонувати файл" or text == "⚙️ Додати підручник":
         context.user_data["upload_state"] = "waiting_for_file"
-        msg = await update.message.reply_text("Будь ласка, надішліть **PDF-файл** підручника, який хочете додати:")
-        context.user_data["last_bot_message_id"] = msg.message_id
+        await update.message.reply_text(
+            "Будь ласка, надішліть **PDF-файл** підручника, який хочете додати:"
+        )
     elif text == "⚙️ Адмін-панель" and user.id == ADMIN_ID:
         await show_admin_panel(update, context)
     elif context.user_data.get("waiting_for_search"):
@@ -223,17 +204,11 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif context.user_data.get("upload_state") == "waiting_for_title":
         await finalize_book_upload(update, context, text)
     else:
-        msg = await update.message.reply_text("Скористайтеся кнопками меню нижче 👇", reply_markup=get_main_menu(user.id))
-        context.user_data["last_bot_message_id"] = msg.message_id
+        await update.message.reply_text("Скористайтеся кнопками меню нижче 👇", reply_markup=get_main_menu(user.id))
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     document = update.message.document
-    try:
-        await update.message.delete()
-    except Exception:
-        pass
-
     if not document:
         return
     
@@ -246,11 +221,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyboard.append([InlineKeyboardButton(cat, callback_data=f"upcat_{cat}")])
         
         context.user_data["upload_state"] = "waiting_for_category"
-        msg = await update.message.reply_text("Чудово! Тепер оберіть категорію дисциплін для цього файлу:", reply_markup=InlineKeyboardMarkup(keyboard))
-        context.user_data["last_bot_message_id"] = msg.message_id
+        await update.message.reply_text("Чудово! Тепер оберіть категорію дисциплін для цього файлу:", reply_markup=InlineKeyboardMarkup(keyboard))
     else:
-        msg = await update.message.reply_text("Будь ласка, спочатку натисніть «📤 Запропонувати файл» у головному меню.")
-        context.user_data["last_bot_message_id"] = msg.message_id
+        await update.message.reply_text("Будь ласка, спочатку натисніть «📤 Запропонувати файл» у головному меню.")
 
 
 # --- РОЗДІЛ «ПІДРУЧНИКИ» ТА ІНТЕРАКТИВНЕ МЕНЮ ---
@@ -267,8 +240,7 @@ async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
     else:
-        msg = await update.message.reply_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
-        context.user_data["last_bot_message_id"] = msg.message_id
+        await update.message.reply_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -400,7 +372,7 @@ async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.pop("selected_discipline", None)
 
     if is_admin:
-        msg = await update.message.reply_text(
+        await update.message.reply_text(
             f"✅ Підручник успішно додано!\n\n"
             f"📚 Назва: **{title}**\n"
             f"📂 Категорія: {category}\n"
@@ -409,7 +381,7 @@ async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYP
             parse_mode="Markdown"
         )
     else:
-        msg = await update.message.reply_text(
+        await update.message.reply_text(
             "Дякуємо! Ваша пропозиція надіслана адміністратору на перевірку.",
             reply_markup=get_main_menu(user.id)
         )
@@ -460,8 +432,7 @@ async def show_admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("➕ Додати підручник", callback_data="admin_start_add")],
     ]
-    msg = await update.message.reply_text("⚙️ **Панель адміністратора:**\nОберіть дію:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-    context.user_data["last_bot_message_id"] = msg.message_id
+    await update.message.reply_text("⚙️ **Панель адміністратора:**\nОберіть дію:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
 
 # --- ВЕБСЕРВЕР ДЛЯ RENDER ТА ЗАПУСК ---
