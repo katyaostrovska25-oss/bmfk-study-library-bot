@@ -202,7 +202,6 @@ async def text_router(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["waiting_for_search"] = False
         await perform_search(update, context, text)
     elif context.user_data.get("upload_state") == "waiting_for_title":
-        # Збереження назви підручника та фіналізація завантаження
         await finalize_book_upload(update, context, text)
     else:
         await update.message.reply_text("Скористайтеся кнопками меню нижче 👇", reply_markup=get_main_menu(user.id))
@@ -217,7 +216,6 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["file_id"] = document.file_id
         context.user_data["default_title"] = document.file_name or "Без назви"
         
-        # Переходимо до вибору категорії кнопочками
         keyboard = []
         for cat in CATEGORIES.keys():
             keyboard.append([InlineKeyboardButton(cat, callback_data=f"upcat_{cat}")])
@@ -237,100 +235,108 @@ async def show_categories(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     if update.callback_query:
-        await update.callback_query.message.edit_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
+        try:
+            await update.callback_query.message.edit_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
+        except Exception:
+            pass
     else:
         await update.message.reply_text("Оберіть категорію дисциплін:", reply_markup=reply_markup)
 
 
 async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception:
+        pass
+
     data = query.data
     user = update.effective_user
 
-    if data.startswith("cat_"):
-        category_name = data[4:]
-        disciplines = CATEGORIES.get(category_name, [])
-        keyboard = []
-        for disc in disciplines:
-            keyboard.append([InlineKeyboardButton(disc, callback_data=f"disc_{category_name}__{disc}")])
-        keyboard.append([InlineKeyboardButton("⬅️ Назад до категорій", callback_data="back_to_cats")])
-        await query.message.edit_text(f"Категорія: **{category_name}**\nОберіть дисципліну:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    try:
+        if data.startswith("cat_"):
+            category_name = data[4:]
+            disciplines = CATEGORIES.get(category_name, [])
+            keyboard = []
+            for disc in disciplines:
+                keyboard.append([InlineKeyboardButton(disc, callback_data=f"disc_{category_name}__{disc}")])
+            keyboard.append([InlineKeyboardButton("⬅️ Назад до категорій", callback_data="back_to_cats")])
+            await query.message.edit_text(f"Категорія: **{category_name}**\nОберіть дисципліну:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-    elif data == "back_to_cats":
-        keyboard = []
-        for cat in CATEGORIES.keys():
-            keyboard.append([InlineKeyboardButton(cat, callback_data=f"cat_{cat}")])
-        await query.message.edit_text("Оберіть категорію дисциплін:", reply_markup=InlineKeyboardMarkup(keyboard))
+        elif data == "back_to_cats":
+            keyboard = []
+            for cat in CATEGORIES.keys():
+                keyboard.append([InlineKeyboardButton(cat, callback_data=f"cat_{cat}")])
+            await query.message.edit_text("Оберіть категорію дисциплін:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    elif data.startswith("disc_"):
-        remainder = data[5:]
-        found_cat = None
-        found_disc = None
-        for cat, discs in CATEGORIES.items():
-            if remainder.startswith(cat + "__"):
-                found_cat = cat
-                found_disc = remainder[len(cat) + 2:]
-                break
+        elif data.startswith("disc_"):
+            remainder = data[5:]
+            found_cat = None
+            found_disc = None
+            for cat, discs in CATEGORIES.items():
+                if remainder.startswith(cat + "__"):
+                    found_cat = cat
+                    found_disc = remainder[len(cat) + 2:]
+                    break
 
-        if found_cat and found_disc:
-            books = await load_books_from_github()
-            filtered_books = [b for b in books if b.get("category") == found_cat and b.get("discipline") == found_disc and b.get("approved", True)]
+            if found_cat and found_disc:
+                books = await load_books_from_github()
+                filtered_books = [b for b in books if b.get("category") == found_cat and b.get("discipline") == found_disc and b.get("approved", True)]
+                
+                if not filtered_books:
+                    text = f"Дисципліна: **{found_disc}**\n\nНаразі тут немає завантажених підручників."
+                    keyboard = [[InlineKeyboardButton("⬅️ Назад до дисциплін", callback_data=f"cat_{found_cat}")]]
+                    await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+                else:
+                    await query.message.edit_text(f"Дисципліна: **{found_disc}**\nЗнайдено матеріалів: {len(filtered_books)}", parse_mode="Markdown")
+                    for book in filtered_books:
+                        title = book.get("title", "Без назви")
+                        file_id = book.get("file_id")
+                        ext_link = book.get("external_link")
+
+                        msg_text = f"📖 **{title}**\nДисципліна: {found_disc}"
+                        if file_id:
+                            await context.bot.send_document(chat_id=query.message.chat_id, document=file_id, caption=msg_text, parse_mode="Markdown")
+                        elif ext_link:
+                            kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Відкрити посилання", url=ext_link)]])
+                            await context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=kb, parse_mode="Markdown")
+
+        elif data.startswith("upcat_"):
+            selected_cat = data[6:]
+            context.user_data["selected_category"] = selected_cat
             
-            if not filtered_books:
-                text = f"Дисципліна: **{found_disc}**\n\nНаразі тут немає завантажених підручників."
-                keyboard = [[InlineKeyboardButton("⬅️ Назад до дисциплін", callback_data=f"cat_{found_cat}")]]
-                await query.message.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-            else:
-                await query.message.edit_text(f"Дисципліна: **{found_disc}**\nЗнайдено матеріалів: {len(filtered_books)}", parse_mode="Markdown")
-                for book in filtered_books:
-                    title = book.get("title", "Без назви")
-                    file_id = book.get("file_id")
-                    ext_link = book.get("external_link")
+            disciplines = CATEGORIES.get(selected_cat, [])
+            keyboard = []
+            for disc in disciplines:
+                keyboard.append([InlineKeyboardButton(disc, callback_data=f"updisc_{disc}")])
+            
+            context.user_data["upload_state"] = "waiting_for_discipline"
+            await query.message.edit_text(f"Категорія: **{selected_cat}**\nТепер оберіть конкретну дисципліну:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-                    msg_text = f"📖 **{title}**\nДисципліна: {found_disc}"
-                    if file_id:
-                        await context.bot.send_document(chat_id=query.message.chat_id, document=file_id, caption=msg_text, parse_mode="Markdown")
-                    elif ext_link:
-                        kb = InlineKeyboardMarkup([[InlineKeyboardButton("🔗 Відкрити посилання", url=ext_link)]])
-                        await context.bot.send_message(chat_id=query.message.chat_id, text=msg_text, reply_markup=kb, parse_mode="Markdown")
+        elif data.startswith("updisc_"):
+            selected_disc = data[7:]
+            context.user_data["selected_discipline"] = selected_disc
+            context.user_data["upload_state"] = "waiting_for_title"
+            
+            default_name = context.user_data.get("default_title", "Підручник")
+            await query.message.edit_text(
+                f"Дисципліна: **{selected_disc}**\n\n"
+                f"Введіть **назву підручника** текстом (або надішліть крапку `.`, щоб використати назву файлу: *{default_name}*):",
+                parse_mode="Markdown"
+            )
 
-    elif data.startswith("upcat_"):
-        # Вибір категорії при завантаженні файлу
-        selected_cat = data[6:]
-        context.user_data["selected_category"] = selected_cat
-        
-        disciplines = CATEGORIES.get(selected_cat, [])
-        keyboard = []
-        for disc in disciplines:
-            keyboard.append([InlineKeyboardButton(disc, callback_data=f"updisc_{disc}")])
-        
-        context.user_data["upload_state"] = "waiting_for_discipline"
-        await query.message.edit_text(f"Категорія: **{selected_cat}**\nТепер оберіть конкретну дисципліну:", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
-
-    elif data.startswith("updisc_"):
-        # Вибір дисципліни при завантаженні файлу
-        selected_disc = data[7:]
-        context.user_data["selected_discipline"] = selected_disc
-        context.user_data["upload_state"] = "waiting_for_title"
-        
-        default_name = context.user_data.get("default_title", "Підручник")
-        await query.message.edit_text(
-            f"Дисципліна: **{selected_disc}**\n\n"
-            f"Введіть **назву підручника** текстом (або надішліть крапку `.`, щоб використати назву файлу: *{default_name}*):",
-            parse_mode="Markdown"
-        )
-
-    elif data.startswith("admin_approve_"):
-        book_index = int(data.split("_")[2])
-        books = await load_books_from_github()
-        if 0 <= book_index < len(books):
-            books[book_index]["approved"] = True
-            success = await save_books_to_github(books, f"Approve book: {books[book_index].get('title')}")
-            if success:
-                await query.message.edit_text("✅ Матеріал успішно схвалено та додано до бібліотеки у відповідну категорію!")
-            else:
-                await query.message.edit_text("❌ Помилка збереження на GitHub.")
+        elif data.startswith("admin_approve_"):
+            book_index = int(data.split("_")[2])
+            books = await load_books_from_github()
+            if 0 <= book_index < len(books):
+                books[book_index]["approved"] = True
+                success = await save_books_to_github(books, f"Approve book: {books[book_index].get('title')}")
+                if success:
+                    await query.message.edit_text("✅ Матеріал успішно схвалено та додано до бібліотеки у відповідну категорію!")
+                else:
+                    await query.message.edit_text("❌ Помилка збереження на GitHub.")
+    except Exception as e:
+        logger.error(f"Помилка в callback обробнику: {e}")
 
 
 async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYPE, text: str):
@@ -352,7 +358,7 @@ async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYP
         "discipline": discipline,
         "file_id": file_id,
         "external_link": None,
-        "approved": is_admin, # Адмін одразу затверджує, студент відправляє на модерацію
+        "approved": is_admin,
         "submitted_by": user.full_name,
     }
 
@@ -361,7 +367,6 @@ async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYP
     book_idx = len(books) - 1
     await save_books_to_github(books, f"Add book: {title} ({discipline})")
 
-    # Очищуємо стани
     context.user_data.pop("upload_state", None)
     context.user_data.pop("file_id", None)
     context.user_data.pop("selected_category", None)
@@ -381,7 +386,6 @@ async def finalize_book_upload(update: Update, context: ContextTypes.DEFAULT_TYP
             "Дякуємо! Ваша пропозиція надіслана адміністратору на перевірку.",
             reply_markup=get_main_menu(user.id)
         )
-        # Сповіщення адміну
         if ADMIN_ID:
             admin_text = (
                 f"📥 **Нова пропозиція матеріалу!**\n"
@@ -459,14 +463,12 @@ def main():
 
     application = Application.builder().token(BOT_TOKEN).build()
 
-    # Реєстрація обробників
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_router))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     application.add_handler(CallbackQueryHandler(handle_callback))
 
-    # Запуск вебсерверу та бота разом
     loop = asyncio.get_event_loop()
     loop.create_task(start_web_server())
 
